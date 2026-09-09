@@ -1,0 +1,1437 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZenMoney — отчёт по категориям</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f7f7f8;
+    --panel: #ffffff;
+    --border: #dde0e3;
+    --text: #1c1e21;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --danger: #dc2626;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111214;
+      --panel: #1a1b1e;
+      --border: #2c2e33;
+      --text: #e7e8ea;
+      --muted: #9aa0a6;
+      --accent: #5b9dff;
+      --danger: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding: 24px;
+  }
+  h1 { font-size: 18px; margin: 0 0 16px; display: flex; align-items: baseline; gap: 8px; }
+  .version { font-size: 11px; font-weight: 400; color: var(--muted); }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+    max-width: 720px;
+  }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  input[type="password"], input[type="month"], input[type="number"], input[type="date"] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+  }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .row > div { flex: 1; min-width: 200px; }
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 9px 16px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  .period-nav { display: flex; gap: 6px; align-items: center; }
+  .period-nav input { flex: 1; }
+  .nav-btn {
+    padding: 8px 12px; font-size: 15px; line-height: 1; flex: none;
+  }
+  .status { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .status.error { color: var(--danger); }
+  fieldset { border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin: 0 0 12px; }
+  .fieldset-details {
+    border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin: 0 0 12px;
+  }
+  .fieldset-details > summary {
+    cursor: pointer; list-style: none; font-size: 12px; color: var(--muted);
+  }
+  .fieldset-details > summary::-webkit-details-marker { display: none; }
+  .fieldset-details > summary::before { content: "▸ "; }
+  .fieldset-details[open] > summary::before { content: "▾ "; }
+  .fieldset-details[open] > summary { margin-bottom: 8px; }
+  .icon-legend { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+  legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
+  .radio-row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .radio-row label, .checks label {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px; color: var(--text); margin: 4px 0;
+  }
+  .checks label.muted { color: var(--muted); }
+  .checks { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .hint a { color: var(--accent); }
+
+  .tree-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 4px 16px;
+    max-width: 720px;
+  }
+  /* Все строки отчёта (итого, родители, листья) — один и тот же грид с фиксированными
+     колонками сумма/доля, чтобы они всегда выстраивались строго друг под другом,
+     независимо от глубины вложенности и ширины экрана. Отступ для вложенности —
+     через padding-left самой строки, а не через margin контейнера (иначе колонки едут). */
+  .tree-row {
+    display: grid;
+    grid-template-columns: 1fr 96px 54px 54px;
+    column-gap: 10px;
+    align-items: center;
+    max-width: 720px;
+  }
+  .report-total {
+    font-weight: 700; font-size: 15px;
+    padding: 10px 16px; border-bottom: 2px solid var(--border);
+  }
+  details.tree-node { border-bottom: 1px solid var(--border); }
+  details.tree-node:last-child { border-bottom: none; }
+  details.tree-node > summary.tree-row {
+    cursor: pointer; list-style: none;
+    padding: 8px 0;
+  }
+  details.tree-node > summary::-webkit-details-marker { display: none; }
+  .t-left { display: flex; align-items: center; min-width: 0; }
+  .tree-marker {
+    display: inline-block; width: 14px; flex: none;
+    color: var(--muted); font-size: 11px;
+  }
+  .tree-marker::before { content: "▸"; }
+  details.tree-node[open] > summary .tree-marker::before { content: "▾"; }
+  .leaf-marker {
+    display: inline-block; width: 14px; flex: none;
+    color: var(--muted); font-size: 11px; letter-spacing: 1px;
+  }
+  .leaf-marker::before { content: "··"; }
+  .leaf-marker.no-dots::before { content: ""; }
+  details.tree-leaf[open] > summary .leaf-marker::before { content: "⌄"; }
+  .cat-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; flex: none; margin-right: 7px;
+    border-radius: 50%; font-size: 11px; line-height: 1;
+  }
+  .cat-icon.cat-letter { color: #fff; font-size: 10px; font-weight: 700; }
+  .tree-children { margin: 0; }
+  details.tree-leaf { border-bottom: 1px solid var(--border); }
+  details.tree-leaf:last-child, .tree-children > details.tree-leaf:last-child { border-bottom: none; }
+  details.tree-leaf > summary.tree-row {
+    cursor: pointer; list-style: none;
+    padding: 6px 0;
+  }
+  details.tree-leaf > summary::-webkit-details-marker { display: none; }
+  .t-sum { font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+  /* строки транзакций используют тот же .tree-row грид, что и суммы категорий —
+     поэтому колонка суммы у них всегда точно под колонкой суммы категории */
+  .tx-list { display: flex; flex-direction: column; padding-bottom: 6px; }
+  details.tx-item > summary.tree-row {
+    cursor: pointer; list-style: none;
+    color: var(--muted); font-size: 12.5px; padding: 2px 0;
+  }
+  details.tx-item > summary::-webkit-details-marker { display: none; }
+  .tx-marker { display: inline-block; width: 12px; flex: none; color: var(--muted); font-size: 10px; }
+  .tx-marker::before { content: "▸"; }
+  details.tx-item[open] > summary .tx-marker::before { content: "▾"; }
+  .tx-item .t-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tx-empty { padding: 2px 0 8px 37px; font-size: 12px; color: var(--muted); }
+  .tx-detail { display: flex; flex-direction: column; gap: 2px; padding-top: 2px; padding-bottom: 8px; }
+  .tx-detail-row { display: flex; gap: 6px; font-size: 12px; }
+  .tx-detail-key { color: var(--muted); flex: none; min-width: 130px; }
+  .tx-detail-val { color: var(--text); word-break: break-word; }
+  .t-pct1, .t-pct2 { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+  .t-title.muted { color: var(--muted); font-style: italic; }
+
+  .proj-tree label { display: inline-flex; align-items: center; gap: 6px; margin: 3px 0; cursor: pointer; }
+  .proj-tree details.proj-node > summary {
+    cursor: pointer; list-style: none; padding: 2px 0;
+  }
+  .proj-tree details.proj-node > summary::-webkit-details-marker { display: none; }
+  .proj-tree details.proj-node > summary::before {
+    content: "▸"; display: inline-block; width: 12px; margin-right: 4px;
+    color: var(--muted); font-size: 10px;
+  }
+  .proj-tree details.proj-node[open] > summary::before { content: "▾"; }
+  .proj-tree .proj-children { margin-left: 18px; }
+  .proj-tree .proj-leaf { padding: 2px 0 2px 16px; }
+
+  .active-filter {
+    font-size: 12px; color: var(--muted);
+    padding: 8px 16px 0;
+  }
+
+  .chart {
+    max-width: 720px; padding: 12px 16px; display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
+  }
+  .chart-pie { flex: none; }
+  .chart-pie circle { transition: opacity .15s; }
+  .chart-pie circle:hover { opacity: .8; }
+  .chart-center-label { font-size: 9px; fill: var(--muted); }
+  .chart-center-value { font-size: 12px; font-weight: 700; fill: var(--text); }
+  .chart-legend { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 4px; }
+  .chart-legend-row { display: grid; grid-template-columns: 10px 1fr auto auto; align-items: center; gap: 8px; font-size: 12px; }
+  .chart-swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+  .chart-legend-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chart-legend-pct, .chart-legend-val { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+
+  .tree-actions { display: flex; gap: 14px; padding: 4px 16px 8px; }
+  .link-btn {
+    background: none; border: none; padding: 0; color: var(--accent);
+    font-size: 12px; text-decoration: underline; cursor: pointer;
+  }
+  .footer { max-width: 720px; padding: 20px 16px 4px; font-size: 11px; color: var(--muted); }
+  .footer a { color: var(--muted); }
+
+  .type-switch { display: flex; gap: 0; margin-bottom: 12px; width: fit-content; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .type-switch label { margin: 0; }
+  .type-switch input { display: none; }
+  .type-switch span {
+    display: block; padding: 7px 18px; font-size: 13px; cursor: pointer;
+    color: var(--muted);
+  }
+  .type-switch input:checked + span { background: var(--accent); color: #fff; }
+  .checkbox-row { display: flex; align-items: center; gap: 6px; font-size: 13px; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<h1>ZenMoney — отчёт по категориям</h1>
+
+<div class="panel">
+  <div class="row">
+    <div>
+      <label for="token">Access token</label>
+      <input type="password" id="token" placeholder="вставь токен" autocomplete="off">
+    </div>
+  </div>
+  <button id="loadBtn">Загрузить данные</button>
+  <div class="status" id="loadStatus"></div>
+  <div class="hint">
+    Токен нигде не сохраняется — только в памяти вкладки, пока она открыта.<br>
+    Как получить: открой <a href="https://zerro.app/token" target="_blank" rel="noopener">zerro.app/token</a>, авторизуйся своим аккаунтом ZenMoney, скопируй токен со страницы.
+  </div>
+</div>
+
+<div class="panel" id="filtersPanel" hidden>
+  <div class="type-switch">
+    <label><input type="radio" name="reportType" value="expense" checked><span>Расходы</span></label>
+    <label><input type="radio" name="reportType" value="income"><span>Доходы</span></label>
+  </div>
+
+  <div class="type-switch">
+    <label><input type="radio" name="periodType" value="month" checked><span>Месяц</span></label>
+    <label><input type="radio" name="periodType" value="year"><span>Год</span></label>
+    <label><input type="radio" name="periodType" value="range"><span>Диапазон</span></label>
+  </div>
+
+  <div class="row">
+    <div id="monthField">
+      <label for="month">Месяц</label>
+      <div class="period-nav">
+        <button type="button" id="prevPeriod" class="nav-btn">‹</button>
+        <input type="month" id="month">
+        <button type="button" id="nextPeriod" class="nav-btn">›</button>
+      </div>
+    </div>
+    <div id="yearField" hidden>
+      <label for="year">Год</label>
+      <div class="period-nav">
+        <button type="button" id="prevPeriodY" class="nav-btn">‹</button>
+        <input type="number" id="year" step="1" min="2000" max="2100">
+        <button type="button" id="nextPeriodY" class="nav-btn">›</button>
+      </div>
+    </div>
+    <div id="rangeField" hidden>
+      <label for="dateFrom">С</label>
+      <input type="date" id="dateFrom">
+    </div>
+    <div id="rangeFieldTo" hidden>
+      <label for="dateTo">По</label>
+      <input type="date" id="dateTo">
+    </div>
+  </div>
+
+  <div class="checkbox-row">
+    <input type="checkbox" id="netRefunds" checked>
+    <label for="netRefunds" style="display:inline; margin:0;">Вычитать возвраты (категории с одним типом Расходы/Доходы)</label>
+  </div>
+
+  <div class="checkbox-row">
+    <input type="checkbox" id="includeExternalTransfers">
+    <label for="includeExternalTransfers" style="display:inline; margin:0;">Учитывать переводы на счета вне выборки как расход/доход</label>
+  </div>
+
+  <details class="fieldset-details" open>
+    <summary>Фильтр по проектам (дополнительная категория транзакции)</summary>
+    <div class="radio-row">
+      <label><input type="radio" name="mode" value="all" checked> все</label>
+      <label><input type="radio" name="mode" value="include"> только выбранные</label>
+      <label><input type="radio" name="mode" value="exclude"> кроме выбранных</label>
+    </div>
+    <div class="checks proj-tree" id="projectChecks"></div>
+  </details>
+
+  <details class="fieldset-details">
+    <summary>Счета <span class="summary-hint">(по умолчанию выбраны «в балансе» 🟢)</span></summary>
+    <div class="icon-legend">🟢 в балансе &nbsp; 🟡 не в балансе &nbsp; 📦 архивный</div>
+    <div class="radio-row" style="margin-bottom:6px">
+      <button type="button" class="link-btn" id="accountsBalanceBtn">В балансе</button>
+      <button type="button" class="link-btn" id="accountsAllBtn">Все</button>
+      <button type="button" class="link-btn" id="accountsNoneBtn">Ничего</button>
+    </div>
+    <div class="checks" id="accountChecks"></div>
+  </details>
+</div>
+
+<div id="reportPanel"></div>
+
+<script>
+(function () {
+  const API_URL = "https://api.zenmoney.ru/v8/diff/";
+
+  // Полный набор встроенных иконок ZenMoney (slug -> эмодзи). Список slug'ов —
+  // весь каталог иконок приложения (не только используемые в этом аккаунте),
+  // так что таблица не должна устаревать при добавлении новых категорий.
+  // Категория без иконки или с неизвестным slug — просто цветной кружок (см. categoryIcon).
+  const ICONS = {
+    "1001_bunch_ingredients": "🥘", "1002_diningroom": "🍽️", "1003_bottle_of_water": "💧",
+    "1004_wine_bottle": "🍷", "1005_doughnut": "🍩", "1006_pizza": "🍕", "1007_hamburger": "🍔",
+    "1008_lunch": "🍱", "1009_deliver": "🛵", "1010_banana": "🍌", "1011_tomato": "🍅",
+    "1012_cocktail": "🍸", "1013_sushi": "🍣", "1014_bakery": "🥐", "1015_corkscrew": "🍾",
+    "1016_coffee_cup": "☕", "1017_coffee_outdoor": "☕", "1018_meat": "🥩", "1019_milk": "🥛",
+    "2001_beer": "🍺", "2002_dancing": "💃", "2003_film_reel": "🎬", "2004_champagne": "🍾",
+    "2005_birthday": "🎂", "2006_candy": "🍬", "2007_controller": "🎮", "2008_books": "📚",
+    "2009_dice": "🎲", "2010_theatre_mask": "🎭", "2011_fishing_hook": "🎣", "2012_gallery": "🖼️",
+    "2013_scooter": "🛴", "2014_tickets": "🎫", "2015_sewing": "🧵", "2016_hunt": "🏹",
+    "2017_club": "🎉", "2501_hand_biceps": "💪", "2502_football": "⚽", "2503_swimming": "🏊",
+    "2504_ping_pong": "🏓", "2505_paint_palette": "🎨", "2506_fitness": "🏋️", "2507_guitar": "🎸",
+    "2508_headphones": "🎧", "2509_brushes_and_pencil": "✏️", "2510_skating": "⛸️", "2511_drums": "🥁",
+    "2512_microphone": "🎤", "2901_christian": "✝️", "2902_russian": "☦️", "2903_ramadan": "🌙",
+    "2904_judaism": "✡️", "2905_religion": "🙏", "2906_esoterica": "🔮", "3001_bus2": "🚌",
+    "3002_cars": "🚗", "3003_bicycle": "🚲", "3003_gas_station": "⛽", "3004_motorcycle": "🏍️",
+    "3004_taxi": "🚕", "3005_train": "🚆", "3006_invalid": "♿", "3007_metro": "🚇",
+    "3008_car_repair": "🔧", "3009_heavy_car": "🚛", "3010_bus": "🚌", "3011_car_wash": "🚿",
+    "3501_gas_station": "⛽", "3502_work": "💼", "3503_parking": "🅿️", "3504_hotel": "🏨",
+    "3505_gasoline": "⛽", "3506_marketing": "📢", "4001_airport": "✈️", "4002_beach": "🏖️",
+    "4501_phone2": "📱", "5001_coat": "🧥", "5002_shoe_woman": "👠", "5003_portrait_mode": "🧍",
+    "5004_barbers_scissors": "✂️", "5005_perfume": "🧴", "5006_shopping": "🛍️", "5007_cosmetic": "💄",
+    "5008_glasses": "👓", "5009_rings": "💍", "5010_spa": "🧖", "5011_sneekers": "👟",
+    "5012_man_shoe": "👞", "5013_jeans": "👖", "5014_dress": "👗", "5015_lipstick": "💄",
+    "5016_manicure": "💅", "5017_mirror": "🪞", "5400_garage": "🚪", "5401_exterior": "🏡",
+    "5402_bath": "🛁", "5403_broom": "🧹", "5404_paint_roller": "🖌️", "5405_toothbrush": "🪥",
+    "5406_cleaning": "🧽", "5407_gas": "🔥", "5408_radiator": "♨️", "5409_water": "🚰",
+    "5501_armchair": "🛋️", "5502_retro_tv": "📺", "5503_electrical": "🔌", "5504_electric_teapot": "🫖",
+    "5505_laptop": "💻", "5506_mobile": "📱", "5507_lamp": "💡", "5508_coffee_maker": "☕",
+    "5509_camera": "📷", "5510_potted_plant": "🪴", "5511_washing_machine": "🧺", "6001_children": "🧒",
+    "6002_stroller": "👶", "6003_carousel": "🎠", "6003_man": "🧑", "6004_family": "👨‍👩‍👧‍👦",
+    "6004_woman": "👩", "6005_teddy_bear": "🧸", "6501_doctor_suitecase": "🩺", "6502_pill": "💊",
+    "6503_doctor": "👨‍⚕️", "6504_heart": "❤️", "6505_smoking": "🚬", "6506_dantist": "🦷",
+    "6507_psycology": "🧠", "6508_pill_glass": "🥤", "7001_gift": "🎁", "7002_charity": "🤲",
+    "7002_literature": "📖", "7501_tree": "🌳", "7502_campfire": "🔥", "7503_flower": "🌸",
+    "7504_tourist": "🎒", "7505_mountain_courort": "⛷️", "7901_cat": "🐱", "7902_dog": "🐶",
+    "7903_fish": "🐟", "7904_parrot": "🦜", "7905_reptile": "🦎", "7906_hamster": "🐹",
+    "8001_question": "❓", "8002_globe": "🌍", "8003_internet_explorer": "🌐", "8004_musical": "🎵",
+    "8501_factory": "🏭", "8502_training": "🎓", "8503_handshake": "🤝", "9001_cash_receiving": "💵",
+    "9002_money_bag": "💰", "9003_banknotes": "💵", "9004_wallet": "👛", "9005_gold_bars": "🪙",
+    "9006_safe": "🔐", "9007_tax": "🧾", "9008_give_money": "🤲", "9009_credit_card": "💳",
+    "9010_coin_piggy": "🐷", "9011_mortgage": "🏦", "9012_credit": "🏦", "9013_portfolio": "📊",
+    "9014_percentage": "%", "9015_police": "👮", "9501_dollar": "💵", "9502_euro": "💶",
+    "9503_bitcoin": "₿"
+  };
+
+  // ARGB-число из API (например 4279738056) -> "#rrggbb"
+  function tagColor(tag) {
+    if (tag && typeof tag.color === "number") {
+      return "#" + (tag.color & 0xFFFFFF).toString(16).padStart(6, "0");
+    }
+    return null;
+  }
+
+  // fallbackTitle — название категории для буквы, если у тега нет иконки
+  // (для строки "без подкатегории" это название родителя, а не сама строка)
+  function categoryIcon(tag, fallbackTitle) {
+    const color = tagColor(tag) || "var(--muted)";
+    const emoji = tag && tag.icon ? ICONS[tag.icon] : null;
+    if (emoji) {
+      return `<span class="cat-icon" style="background:${color}">${emoji}</span>`;
+    }
+    const label = ((tag && tag.title) || fallbackTitle || "?").trim();
+    const letter = escapeHtml(label.charAt(0).toUpperCase());
+    return `<span class="cat-icon cat-letter" style="background:${color}">${letter}</span>`;
+  }
+
+  const tokenInput = document.getElementById("token");
+  const loadBtn = document.getElementById("loadBtn");
+  const loadStatus = document.getElementById("loadStatus");
+  const filtersPanel = document.getElementById("filtersPanel");
+  const monthInput = document.getElementById("month");
+  const yearInput = document.getElementById("year");
+  const dateFromInput = document.getElementById("dateFrom");
+  const dateToInput = document.getElementById("dateTo");
+  const monthField = document.getElementById("monthField");
+  const yearField = document.getElementById("yearField");
+  const rangeField = document.getElementById("rangeField");
+  const rangeFieldTo = document.getElementById("rangeFieldTo");
+  const projectChecks = document.getElementById("projectChecks");
+  const accountChecks = document.getElementById("accountChecks");
+  const reportPanel = document.getElementById("reportPanel");
+
+  let data = null;          // сырой ответ API
+  let lastReportTxs = [];      // плоский список транзакций последнего построенного отчёта — для экспорта в CSV
+  let lastReportSummary = [];  // плоская сводка по категориям/подкатегориям — для экспорта в CSV
+  let tagById = new Map();  // id -> tag
+  let accountById = new Map(); // id -> account
+  let merchantById = new Map(); // id -> merchant
+  let instrumentById = new Map(); // id -> instrument (для symbol/shortTitle)
+  let instrumentRate = new Map(); // instrument id -> курс к базовой валюте
+  const chainCache = new Map();   // categoryId -> [tag, ...] от корня к листу
+
+  const now = new Date();
+  monthInput.value = now.toISOString().slice(0, 7);
+  yearInput.value = now.getFullYear();
+  dateFromInput.value = now.toISOString().slice(0, 10);
+  dateToInput.value = now.toISOString().slice(0, 10);
+
+  document.querySelectorAll('input[name="periodType"]').forEach(r => r.addEventListener("change", () => {
+    const type = currentPeriodType();
+    monthField.hidden = type !== "month";
+    yearField.hidden = type !== "year";
+    rangeField.hidden = type !== "range";
+    rangeFieldTo.hidden = type !== "range";
+    onPeriodChange();
+  }));
+
+  function currentPeriodType() {
+    return document.querySelector('input[name="periodType"]:checked').value;
+  }
+
+  // Проверяет, попадает ли дата транзакции (строка "YYYY-MM-DD") в текущий выбранный период
+  function periodMatches(dateStr) {
+    const type = currentPeriodType();
+    if (type === "year") return dateStr.slice(0, 4) === String(yearInput.value);
+    if (type === "range") {
+      const from = dateFromInput.value, to = dateToInput.value;
+      return (!from || dateStr >= from) && (!to || dateStr <= to);
+    }
+    return dateStr.slice(0, 7) === monthInput.value; // month
+  }
+
+  // Короткий идентификатор периода — для имени файла при экспорте
+  function periodKey() {
+    const type = currentPeriodType();
+    if (type === "year") return String(yearInput.value);
+    if (type === "range") return `${dateFromInput.value}_${dateToInput.value}`;
+    return monthInput.value;
+  }
+
+  function onPeriodChange() {
+    if (!data) return;
+    const previouslySelected = selectedProjectIds(); // сохраняем выбор, если он ещё актуален для нового периода
+    projectTreeData = buildProjectTree();
+    renderProjectTree();
+    previouslySelected.forEach(id => {
+      const cb = checkboxFor(id);
+      if (cb) { cb.checked = true; updateAncestorsState(id); }
+    });
+    renderReport();
+  }
+
+  function shiftMonth(delta) {
+    const [y, m] = monthInput.value.split("-").map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    monthInput.value = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+    onPeriodChange();
+  }
+
+  function shiftYear(delta) {
+    yearInput.value = Number(yearInput.value) + delta;
+    onPeriodChange();
+  }
+
+  document.getElementById("prevPeriod").addEventListener("click", () => shiftMonth(-1));
+  document.getElementById("nextPeriod").addEventListener("click", () => shiftMonth(1));
+  document.getElementById("prevPeriodY").addEventListener("click", () => shiftYear(-1));
+  document.getElementById("nextPeriodY").addEventListener("click", () => shiftYear(1));
+  dateFromInput.addEventListener("change", onPeriodChange);
+  dateToInput.addEventListener("change", onPeriodChange);
+
+  function setStatus(text, isError) {
+    loadStatus.textContent = text;
+    loadStatus.className = "status" + (isError ? " error" : "");
+  }
+
+  function formatDateTime(d) {
+    return d.toLocaleString("ru-RU", {
+      day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit"
+    });
+  }
+
+  loadBtn.addEventListener("click", loadData);
+  tokenInput.addEventListener("keydown", e => {
+    if (e.key === "Enter") loadData();
+  });
+
+  async function loadData() {
+    const token = tokenInput.value.trim();
+    if (!token) { setStatus("Введи токен.", true); return; }
+
+    loadBtn.disabled = true;
+    setStatus("Загрузка...");
+
+    try {
+      const tFetchStart = performance.now();
+      const resp = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer " + token,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          currentClientTimestamp: Math.floor(Date.now() / 1000),
+          serverTimestamp: 0
+        })
+      });
+
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        throw new Error("HTTP " + resp.status + " " + text.slice(0, 200));
+      }
+
+      const tFetchEnd = performance.now();
+      data = await resp.json();
+      const tParseEnd = performance.now();
+      prepareData();
+      filtersPanel.hidden = false;
+      renderReport();
+      const tRenderEnd = performance.now();
+
+      const loadedAt = formatDateTime(new Date());
+      const ms = n => Math.round(n) + " мс";
+      const sec = n => (n / 1000).toFixed(1) + " с";
+      // serverTimestamp в ответе — это просто текущее время сервера на момент запроса
+      // (нужен только для следующего инкрементального diff), а не время последнего
+      // изменения данных — API такого поля не отдаёт, поэтому отдельно не показываем.
+      setStatus(
+        `Загружено: ${data.transaction.length} транзакций. Время загрузки: ${loadedAt}. ` +
+        `Обработка: ${sec(tRenderEnd - tFetchStart)} ` +
+        `(сеть: ${ms(tFetchEnd - tFetchStart)}, разбор JSON: ${ms(tParseEnd - tFetchEnd)}, построение отчёта: ${ms(tRenderEnd - tParseEnd)}).`
+      );
+    } catch (err) {
+      setStatus("Ошибка: " + err.message + " (если это CORS/сеть — открой файл через локальный сервер, не напрямую file://)", true);
+    } finally {
+      loadBtn.disabled = false;
+    }
+  }
+
+  // Проект — это любая категория транзакции, кроме первой (tag[1], tag[2], ...),
+  // какой бы она ни была (подкатегория "#Проекты", "#Семья" или любой другой — не важно).
+  let projectTreeData = { roots: [], nodeMap: new Map() };
+
+  function prepareData() {
+    tagById = new Map(data.tag.map(t => [t.id, t]));
+    accountById = new Map(data.account.map(a => [a.id, a]));
+    merchantById = new Map((data.merchant || []).map(m => [m.id, m]));
+    instrumentById = new Map(data.instrument.map(i => [i.id, i]));
+    chainCache.clear();
+    instrumentRate = new Map(data.instrument.map(i => [i.id, i.rate]));
+
+    projectTreeData = buildProjectTree();
+    renderProjectTree();
+    renderAccountChecks();
+  }
+
+  // Список счетов не зависит от периода (в отличие от проектов) — строится один раз при загрузке.
+  // По умолчанию отмечены счета "в балансе" (account.inBalance) — как в самом ZenMoney.
+  function renderAccountChecks() {
+    const accounts = data.account
+      .slice()
+      .sort((a, b) => {
+        if (a.inBalance !== b.inBalance) return a.inBalance ? -1 : 1;
+        if (a.archive !== b.archive) return a.archive ? 1 : -1;
+        return (a.title || "").localeCompare(b.title || "", "ru");
+      });
+
+    accountChecks.innerHTML = "";
+    accounts.forEach(acc => {
+      const label = document.createElement("label");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.value = acc.id;
+      cb.checked = !!acc.inBalance;
+      cb.addEventListener("change", renderReport);
+      label.appendChild(cb);
+      const marks = (acc.inBalance ? "🟢" : "🟡") + (acc.archive ? "📦" : "");
+      const text = document.createTextNode((marks ? marks + " " : "") + (acc.title || "?"));
+      label.appendChild(text);
+      if (acc.archive) label.classList.add("muted");
+      accountChecks.appendChild(label);
+    });
+  }
+
+  function selectedAccountIds() {
+    return new Set(
+      Array.from(accountChecks.querySelectorAll("input:checked")).map(cb => cb.value)
+    );
+  }
+
+  document.getElementById("accountsBalanceBtn").addEventListener("click", () => {
+    accountChecks.querySelectorAll("input").forEach(cb => {
+      const acc = data.account.find(a => a.id === cb.value);
+      cb.checked = !!(acc && acc.inBalance);
+    });
+    renderReport();
+  });
+  document.getElementById("accountsAllBtn").addEventListener("click", () => {
+    accountChecks.querySelectorAll("input").forEach(cb => { cb.checked = true; });
+    renderReport();
+  });
+  document.getElementById("accountsNoneBtn").addEventListener("click", () => {
+    accountChecks.querySelectorAll("input").forEach(cb => { cb.checked = false; });
+    renderReport();
+  });
+
+  // Строит дерево из всех тегов, использованных как tag[1], вместе с их предками
+  // (предок нужен только для группировки в дереве, сам по себе фильтром может и не быть).
+  function buildProjectTree() {
+    const usedProjectIds = new Set();
+    for (const tx of data.transaction) {
+      if (!tx.tag) continue;
+      if (tx.deleted) continue;
+      if (tx.date === "1970-01-01") continue;
+      if (!tx.date || !periodMatches(tx.date)) continue;
+      for (let i = 1; i < tx.tag.length; i++) {
+        if (tx.tag[i]) usedProjectIds.add(tx.tag[i]);
+      }
+    }
+
+    const nodeMap = new Map();
+    function ensureNode(tag) {
+      if (!nodeMap.has(tag.id)) {
+        nodeMap.set(tag.id, { id: tag.id, title: tag.title || "?", parentId: tag.parent || null, childIds: [], isUsed: false });
+      }
+      return nodeMap.get(tag.id);
+    }
+
+    for (const id of usedProjectIds) {
+      const chain = getChain(id); // [корень, ..., id]
+      for (let i = 0; i < chain.length; i++) {
+        const n = ensureNode(chain[i]);
+        if (i > 0) {
+          const parentNode = ensureNode(chain[i - 1]);
+          if (!parentNode.childIds.includes(n.id)) parentNode.childIds.push(n.id);
+        }
+      }
+      nodeMap.get(id).isUsed = true;
+    }
+
+    const roots = Array.from(nodeMap.values()).filter(n => !n.parentId || !nodeMap.has(n.parentId));
+    roots.sort((a, b) => a.title.localeCompare(b.title, "ru"));
+    return { roots, nodeMap };
+  }
+
+  function renderProjectTree() {
+    const { roots, nodeMap } = projectTreeData;
+
+    function renderNode(id) {
+      const n = nodeMap.get(id);
+      const children = n.childIds
+        .slice()
+        .sort((a, b) => nodeMap.get(a).title.localeCompare(nodeMap.get(b).title, "ru"));
+      const label = `<label><input type="checkbox" data-id="${n.id}"> ${escapeHtml(n.title)}</label>`;
+      if (children.length > 0) {
+        const inner = children.map(renderNode).join("");
+        return `<details class="proj-node" open><summary>${label}</summary><div class="proj-children">${inner}</div></details>`;
+      }
+      return `<div class="proj-leaf">${label}</div>`;
+    }
+
+    let html = "";
+    for (const r of roots) html += renderNode(r.id);
+    projectChecks.innerHTML = html;
+
+    // клик по чекбоксу/подписи не должен схлопывать <details>
+    projectChecks.querySelectorAll("label").forEach(l => {
+      l.addEventListener("click", e => e.stopPropagation());
+    });
+
+    projectChecks.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.addEventListener("change", () => {
+        const id = cb.dataset.id;
+        setDescendantsChecked(id, cb.checked);
+        updateAncestorsState(id);
+        renderReport();
+      });
+    });
+  }
+
+  function checkboxFor(id) {
+    return projectChecks.querySelector(`input[data-id="${id}"]`);
+  }
+
+  function setDescendantsChecked(id, checked) {
+    const n = projectTreeData.nodeMap.get(id);
+    const cb = checkboxFor(id);
+    if (cb) { cb.checked = checked; cb.indeterminate = false; }
+    for (const cid of n.childIds) setDescendantsChecked(cid, checked);
+  }
+
+  function updateAncestorsState(id) {
+    const n = projectTreeData.nodeMap.get(id);
+    if (!n.parentId || !projectTreeData.nodeMap.has(n.parentId)) return;
+    const parent = projectTreeData.nodeMap.get(n.parentId);
+    const states = parent.childIds.map(cid => {
+      const c = checkboxFor(cid);
+      if (!c) return "unchecked";
+      return c.indeterminate ? "mixed" : (c.checked ? "checked" : "unchecked");
+    });
+    const parentCb = checkboxFor(parent.id);
+    if (parentCb) {
+      if (states.every(s => s === "checked")) { parentCb.checked = true; parentCb.indeterminate = false; }
+      else if (states.every(s => s === "unchecked")) { parentCb.checked = false; parentCb.indeterminate = false; }
+      else { parentCb.checked = false; parentCb.indeterminate = true; }
+    }
+    updateAncestorsState(parent.id);
+  }
+
+  monthInput.addEventListener("change", onPeriodChange);
+  yearInput.addEventListener("change", onPeriodChange);
+  document.getElementById("netRefunds").addEventListener("change", renderReport);
+  document.getElementById("includeExternalTransfers").addEventListener("change", renderReport);
+  document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener("change", renderReport));
+  document.querySelectorAll('input[name="reportType"]').forEach(r => r.addEventListener("change", renderReport));
+
+  function selectedProjectIds() {
+    const result = new Set();
+    projectChecks.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      if (cb.checked && !cb.indeterminate) {
+        const n = projectTreeData.nodeMap.get(cb.dataset.id);
+        if (n && n.isUsed) result.add(cb.dataset.id);
+      }
+    });
+    return result;
+  }
+
+  function currentMode() {
+    return document.querySelector('input[name="mode"]:checked').value;
+  }
+
+  function currentReportType() {
+    return document.querySelector('input[name="reportType"]:checked').value;
+  }
+
+  // Цепочка тегов от корневой категории до выбранного tag[0] включительно
+  function getChain(id) {
+    if (chainCache.has(id)) return chainCache.get(id);
+    const chain = [];
+    let cur = tagById.get(id);
+    const seen = new Set();
+    while (cur && !seen.has(cur.id)) {
+      seen.add(cur.id);
+      chain.unshift(cur);
+      cur = cur.parent ? tagById.get(cur.parent) : null;
+    }
+    chainCache.set(id, chain);
+    return chain;
+  }
+
+  function makeNode(id, title, tag) {
+    return { id, title, tag: tag || null, sum: 0, ownSum: 0, count: 0, children: new Map(), txs: [] };
+  }
+
+  // Собирает плоскую запись транзакции для отображения/экспорта — общий формат
+  // и для основного отчёта, и для списка возвратов.
+  function buildTxRecord(tx, amount, rawAmount, instrumentId, accountId, categoryId, categoryTag, projectIds, transferLabel, noCategoryLabel) {
+    const fallbackLabel = noCategoryLabel || "Без категории";
+    const projectTitles = projectIds.map(id => tagById.get(id)).filter(Boolean).map(t => t.title);
+    const categoryChain = categoryId ? getChain(categoryId) : [];
+    const topCategory = categoryChain.length ? categoryChain[0].title : fallbackLabel;
+    const leafCategory = categoryId ? ((categoryTag && categoryTag.title) || "?") : fallbackLabel;
+    return {
+      id: tx.id,
+      date: tx.date,
+      amount,
+      rawAmount,
+      instrumentId,
+      // у перевода на счёт вне выборки обычно нет получателя/комментария — подставляем счёт назначения/источника
+      payee: tx.payee || tx.comment || transferLabel || null,
+      // комментарий показываем отдельно, только если он не был уже использован как payee выше
+      comment: (tx.payee && tx.comment) ? tx.comment : null,
+      originalPayee: (tx.originalPayee && tx.originalPayee !== tx.payee) ? tx.originalPayee : null,
+      merchant: tx.merchant ? ((merchantById.get(tx.merchant) || {}).title || null) : null,
+      mcc: (tx.mcc != null) ? tx.mcc : null,
+      hold: !!tx.hold,
+      qrCode: !!tx.qrCode,
+      project: projectTitles.length ? projectTitles.join(", ") : null,
+      account: (accountById.get(accountId) || {}).title || null,
+      category: leafCategory,
+      // если категория сама верхнего уровня — родитель совпадает с ней, отдельно не дублируем
+      parentCategory: categoryChain.length > 1 ? topCategory : null
+    };
+  }
+
+  // Возврат — операция с направлением, противоположным настроенному типу категории
+  // (категория показывается только как Расходы либо только как Доходы). Список не зависит
+  // от текущего типа отчёта и настройки "Вычитать возвраты" — это отдельный срез по смыслу
+  // операции, но учитывает фильтры по периоду/счетам/проектам.
+  function computeRefunds(mode, selected, selectedAccounts) {
+    const refunds = [];
+    for (const tx of data.transaction) {
+      if (tx.deleted) continue;
+      if (tx.date === "1970-01-01") continue;
+      if (!tx.date || !periodMatches(tx.date)) continue;
+      if (tx.income > 0 && tx.outcome > 0) continue; // перевод между счетами
+
+      const tags = tx.tag || [];
+      const categoryId = tags.length > 0 ? tags[0] : null;
+      if (!categoryId) continue;
+      const categoryTag = tagById.get(categoryId);
+      if (!categoryTag) continue;
+      const isSingleType = categoryTag.showIncome !== categoryTag.showOutcome;
+      if (!isSingleType) continue;
+
+      const projectIds = tags.slice(1).filter(Boolean);
+      let amount, instrumentId, accountId;
+      if (tx.outcome > 0 && tx.income === 0) {
+        if (!categoryTag.showIncome) continue; // обычный расход по расходной категории — не возврат
+        amount = -tx.outcome; instrumentId = tx.outcomeInstrument; accountId = tx.outcomeAccount;
+      } else if (tx.income > 0 && tx.outcome === 0) {
+        if (!categoryTag.showOutcome) continue; // обычный доход по доходной категории — не возврат
+        amount = tx.income; instrumentId = tx.incomeInstrument; accountId = tx.incomeAccount;
+      } else continue;
+
+      if (!selectedAccounts.has(accountId)) continue;
+      if (mode === "include") {
+        if (!projectIds.some(id => selected.has(id))) continue;
+      } else if (mode === "exclude") {
+        if (projectIds.some(id => selected.has(id))) continue;
+      }
+
+      const rawAmount = amount;
+      const rate = instrumentRate.get(instrumentId) || 1;
+      amount = amount * rate;
+
+      refunds.push(buildTxRecord(tx, amount, rawAmount, instrumentId, accountId, categoryId, categoryTag, projectIds));
+    }
+    refunds.sort((a, b) => a.date.localeCompare(b.date));
+    return refunds;
+  }
+
+  // Переводы между счётом из выборки и счётом вне неё — при выключенном чекбоксе
+  // "Учитывать переводы..." они полностью исключены из отчёта; этот список — только чтобы
+  // видеть, что именно осталось "за бортом" (не влияет на суммы/дерево категорий).
+  function computeExternalTransfers(mode, selected, selectedAccounts) {
+    const list = [];
+    for (const tx of data.transaction) {
+      if (tx.deleted) continue;
+      if (tx.date === "1970-01-01") continue;
+      if (!tx.date || !periodMatches(tx.date)) continue;
+      if (!(tx.income > 0 && tx.outcome > 0)) continue; // интересуют только переводы
+
+      const outSelected = selectedAccounts.has(tx.outcomeAccount);
+      const inSelected = selectedAccounts.has(tx.incomeAccount);
+      if (outSelected === inSelected) continue; // внутренний перевод в выборке или оба счёта вне неё
+
+      const tags = tx.tag || [];
+      const projectIds = tags.slice(1).filter(Boolean);
+      if (mode === "include") {
+        if (!projectIds.some(id => selected.has(id))) continue;
+      } else if (mode === "exclude") {
+        if (projectIds.some(id => selected.has(id))) continue;
+      }
+
+      let amount, instrumentId, accountId, transferLabel;
+      if (outSelected) {
+        amount = -tx.outcome; instrumentId = tx.outcomeInstrument; accountId = tx.outcomeAccount;
+        transferLabel = `Перевод на счёт «${(accountById.get(tx.incomeAccount) || {}).title || "?"}»`;
+      } else {
+        amount = tx.income; instrumentId = tx.incomeInstrument; accountId = tx.incomeAccount;
+        transferLabel = `Перевод со счёта «${(accountById.get(tx.outcomeAccount) || {}).title || "?"}»`;
+      }
+
+      const rawAmount = amount;
+      const rate = instrumentRate.get(instrumentId) || 1;
+      amount = amount * rate;
+
+      list.push(buildTxRecord(tx, amount, rawAmount, instrumentId, accountId, null, null, projectIds, transferLabel, "Переводы вне выборки"));
+    }
+    list.sort((a, b) => a.date.localeCompare(b.date));
+    return list;
+  }
+
+  function renderReport() {
+    if (!data) return;
+
+    const mode = currentMode();
+    const selected = selectedProjectIds();
+    const selectedAccounts = selectedAccountIds();
+    const reportType = currentReportType(); // 'expense' | 'income'
+    const netRefunds = document.getElementById("netRefunds").checked;
+    const includeTransfers = document.getElementById("includeExternalTransfers").checked;
+
+    const roots = new Map();
+    let total = 0;
+    lastReportTxs = []; // плоский список для экспорта в CSV
+
+    for (const tx of data.transaction) {
+      if (tx.deleted) continue;
+      if (tx.date === "1970-01-01") continue; // технические записи пересчёта баланса
+      if (!tx.date || !periodMatches(tx.date)) continue;
+
+      // перевод между счетами (заполнены обе стороны). Если оба счёта попадают в текущую
+      // выборку — это внутреннее перемещение денег, не участвует. Если ровно один счёт
+      // выбран — деньги фактически покидают/входят в отслеживаемый периметр; при включённом
+      // чекбоксе "Учитывать переводы..." это показывается как обычный расход/доход, иначе —
+      // как и раньше, полностью исключается из отчёта (см. отдельный список ниже дерева категорий).
+      const isTransfer = tx.income > 0 && tx.outcome > 0;
+      if (isTransfer && !includeTransfers) continue;
+      const outSelected = isTransfer ? selectedAccounts.has(tx.outcomeAccount) : false;
+      const inSelected = isTransfer ? selectedAccounts.has(tx.incomeAccount) : false;
+      if (isTransfer && outSelected === inSelected) continue;
+
+      const tags = tx.tag || [];
+      const categoryId = tags.length > 0 ? tags[0] : null;
+      const projectIds = tags.slice(1).filter(Boolean); // любая категория, кроме первой
+      const categoryTag = categoryId ? tagById.get(categoryId) : null;
+      // категория настроена только на один тип (Расходы либо Доходы), не на оба
+      const isSingleType = !!categoryTag && (categoryTag.showIncome !== categoryTag.showOutcome);
+
+      let amount = 0;
+      let instrumentId = null;
+      let accountId = null;
+      let transferLabel = null;
+
+      if (reportType === "expense") {
+        if (isTransfer) {
+          if (!outSelected) continue; // деньги пришли на отслеживаемый счёт извне — это не расход
+          amount = tx.outcome; instrumentId = tx.outcomeInstrument; accountId = tx.outcomeAccount;
+          transferLabel = `Перевод на счёт «${(accountById.get(tx.incomeAccount) || {}).title || "?"}»`;
+        } else if (tx.outcome > 0 && tx.income === 0) {
+          // при включённом вычете возвратов эта сумма уже учтена (вычтена) в Доходах — не дублируем её в Расходах
+          if (netRefunds && isSingleType && categoryTag.showIncome) continue;
+          amount = tx.outcome; instrumentId = tx.outcomeInstrument; accountId = tx.outcomeAccount;
+        } else if (tx.income > 0 && tx.outcome === 0) {
+          if (!netRefunds) continue;
+          if (!(isSingleType && categoryTag.showOutcome)) continue; // не возврат — это обычный доход, сюда не относится
+          amount = -tx.income; instrumentId = tx.incomeInstrument; accountId = tx.incomeAccount;
+        } else continue;
+      } else {
+        if (isTransfer) {
+          if (!inSelected) continue; // деньги ушли со отслеживаемого счёта наружу — это не доход
+          amount = tx.income; instrumentId = tx.incomeInstrument; accountId = tx.incomeAccount;
+          transferLabel = `Перевод со счёта «${(accountById.get(tx.outcomeAccount) || {}).title || "?"}»`;
+        } else if (tx.income > 0 && tx.outcome === 0) {
+          // при включённом вычете возвратов эта сумма уже учтена (вычтена) в Расходах — не дублируем её в Доходах
+          if (netRefunds && isSingleType && categoryTag.showOutcome) continue;
+          amount = tx.income; instrumentId = tx.incomeInstrument; accountId = tx.incomeAccount;
+        } else if (tx.outcome > 0 && tx.income === 0) {
+          if (!netRefunds) continue;
+          if (!(isSingleType && categoryTag.showIncome)) continue; // не возврат дохода — обычный расход, сюда не относится
+          amount = -tx.outcome; instrumentId = tx.outcomeInstrument; accountId = tx.outcomeAccount;
+        } else continue;
+      }
+
+      if (!selectedAccounts.has(accountId)) continue;
+
+      if (mode === "include") {
+        if (!projectIds.some(id => selected.has(id))) continue;
+      } else if (mode === "exclude") {
+        if (projectIds.some(id => selected.has(id))) continue;
+      }
+
+      const rawAmount = amount; // сумма в исходной валюте операции, до конвертации по курсу
+      const rate = instrumentRate.get(instrumentId) || 1;
+      amount = amount * rate;
+      total += amount;
+
+      const txRecord = buildTxRecord(tx, amount, rawAmount, instrumentId, accountId, categoryId, categoryTag, projectIds, transferLabel, isTransfer ? "Переводы вне выборки" : undefined);
+      lastReportTxs.push(txRecord);
+
+      if (isTransfer) {
+        const n = roots.get("__transfer__") || makeNode("__transfer__", "Переводы вне выборки");
+        n.sum += amount; n.ownSum += amount; n.count += 1;
+        n.txs.push(txRecord);
+        roots.set("__transfer__", n);
+        continue;
+      }
+
+      if (!categoryId) {
+        const n = roots.get("__none__") || makeNode("__none__", "Без категории");
+        n.sum += amount; n.ownSum += amount; n.count += 1;
+        n.txs.push(txRecord);
+        roots.set("__none__", n);
+        continue;
+      }
+
+      const chain = getChain(categoryId);
+      let level = roots;
+      let node = null;
+      for (const t of chain) {
+        node = level.get(t.id) || makeNode(t.id, t.title || "?", t);
+        node.sum += amount;
+        node.count += 1;
+        level.set(t.id, node);
+        level = node.children;
+      }
+      if (node) { node.ownSum += amount; node.txs.push(txRecord); }
+    }
+
+    const filterLabel = activeFilterLabel(mode);
+
+    if (roots.size === 0) {
+      lastReportSummary = [];
+      reportPanel.innerHTML =
+        `<div class="active-filter">${filterLabel}</div>` +
+        `<div class="panel">Нет данных.</div>`;
+      return;
+    }
+
+    lastReportSummary = flattenSummary(roots, 0);
+
+    const fmt = n => Math.round(n).toLocaleString("ru-RU") + " ₽";
+
+    let html = `<div class="report-total tree-row">
+        <span>Итого</span><span class="t-sum">${fmt(total)}</span><span class="t-pct1"></span><span class="t-pct2">100.0%</span>
+      </div>`;
+    html += `<div class="active-filter">${filterLabel}</div>`;
+    html += renderChart(roots, fmt);
+    html += `<div class="tree-actions">
+        <button type="button" class="link-btn" id="toggleCategoriesBtn" data-open="false">▸ Развернуть категории</button>
+        <button type="button" class="link-btn" id="toggleTxBtn" data-open="false">▸ Показать транзакции</button>
+      </div>`;
+    html += '<div class="tree-wrap">' + renderTree(roots, fmt, total, null, 0) + '</div>';
+
+    const refunds = computeRefunds(mode, selected, selectedAccounts);
+    if (refunds.length) {
+      html += '<div class="tree-wrap" style="margin-top:10px">' + renderRefunds(refunds, fmt) + '</div>';
+    }
+
+    const externalTransfers = computeExternalTransfers(mode, selected, selectedAccounts);
+    if (externalTransfers.length) {
+      html += '<div class="tree-wrap" style="margin-top:10px">' + renderExternalTransfers(externalTransfers, fmt) + '</div>';
+    }
+
+    html += `<div class="tree-actions" style="margin-top:10px">
+        <button type="button" class="link-btn" id="exportCsvBtn">📥 Экспорт CSV</button>
+      </div>`;
+    reportPanel.innerHTML = html;
+
+    const toggleCategoriesBtn = document.getElementById("toggleCategoriesBtn");
+    toggleCategoriesBtn.addEventListener("click", () => {
+      const open = toggleCategoriesBtn.dataset.open !== "true";
+      reportPanel.querySelectorAll("details.tree-node").forEach(d => { d.open = open; });
+      toggleCategoriesBtn.dataset.open = String(open);
+      toggleCategoriesBtn.textContent = open ? "▾ Свернуть категории" : "▸ Развернуть категории";
+    });
+
+    const toggleTxBtn = document.getElementById("toggleTxBtn");
+    toggleTxBtn.addEventListener("click", () => {
+      const open = toggleTxBtn.dataset.open !== "true";
+      reportPanel.querySelectorAll("details.tree-leaf").forEach(d => { d.open = open; });
+      toggleTxBtn.dataset.open = String(open);
+      toggleTxBtn.textContent = open ? "▾ Скрыть транзакции" : "▸ Показать транзакции";
+    });
+
+    document.getElementById("exportCsvBtn").addEventListener("click", exportCSV);
+  }
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function csvEscape(v) {
+    const s = String(v == null ? "" : v);
+    return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  // Плоский список транзакций текущего отчёта (lastReportTxs, собран в renderReport)
+  function exportCSV() {
+    if (!lastReportTxs.length && !lastReportSummary.length) { alert("Нет данных для экспорта."); return; }
+
+    // запятая как разделитель дробной части (разделитель полей — ";", конфликта нет)
+    const csvNum = n => n.toFixed(2).replace(".", ",");
+    const mode = currentMode();
+    const reportType = currentReportType();
+    const netRefunds = document.getElementById("netRefunds").checked;
+    const titles = selectedTopTitles();
+
+    const rows = [];
+
+    rows.push(["ZenMoney — отчёт по категориям"]);
+    rows.push(["Период", formatPeriod()]);
+    rows.push(["Тип", reportType === "income" ? "Доходы" : "Расходы"]);
+    rows.push(["Вычет возвратов", netRefunds ? "включён" : "выключен"]);
+    rows.push(["Фильтр по проектам", mode === "all" ? "все" : `${mode === "include" ? "только" : "кроме"}: ${titles.join(", ")}`]);
+    rows.push([]);
+
+    rows.push(["Сводка по категориям"]);
+    rows.push(["Категория", "Сумма (подкатегория)", "Сумма (родитель)"]);
+    lastReportSummary.forEach(r => rows.push([
+      ". . ".repeat(r.depth) + r.title,
+      r.depth > 0 ? csvNum(r.sum) : "",
+      r.depth === 0 ? csvNum(r.sum) : ""
+    ]));
+    // сумма родительских категорий и сумма атомарных (leaf) строк — два независимых способа
+    // посчитать общий итог, для сверки в таблице они должны совпасть
+    const parentTotal = lastReportSummary.filter(r => r.depth === 0).reduce((s, r) => s + r.sum, 0);
+    const subTotal = lastReportSummary.filter(r => r.leaf).reduce((s, r) => s + r.sum, 0);
+    rows.push(["Итого", csvNum(subTotal), csvNum(parentTotal)]);
+
+    rows.push([]);
+    rows.push(["Транзакции"]);
+    rows.push(["Дата", "Родительская категория", "Категория", "Проект", "Счёт", "Получатель/комментарий", "Сумма"]);
+    lastReportTxs
+      .slice()
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .forEach(t => rows.push([t.date, t.parentCategory || "", t.category, t.project || "", t.account || "", t.payee || "", csvNum(t.amount)]));
+
+    const csv = rows.map(r => r.map(csvEscape).join(";")).join("\r\n");
+    // BOM (﻿) — чтобы Excel правильно определил UTF-8 и не сломал кириллицу
+    downloadBlob(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }), `zenmoney-${periodKey()}_${filterMnemonic()}.csv`);
+  }
+
+  const CHART_FALLBACK_COLORS = ["#6b7280", "#9ca3af", "#78716c", "#71717a", "#64748b"];
+
+  // Круговая диаграмма (SVG donut, без библиотек) по категориям верхнего уровня — топ-7 + "Остальное".
+  // Отрицательные суммы (категория ушла в минус из-за вычета возвратов) в сектора не попадают —
+  // геометрически для них нет смысла, такие категории просто не показываются в диаграмме.
+  function renderChart(levelMap, fmt) {
+    const nodes = Array.from(levelMap.values())
+      .filter(n => n.sum > 0)
+      .sort((a, b) => b.sum - a.sum);
+    if (nodes.length === 0) return "";
+
+    const shown = nodes.slice(0, 7);
+    const rest = nodes.slice(7);
+    const restSum = rest.reduce((s, n) => s + n.sum, 0);
+    const segments = restSum > 0 ? shown.concat([{ title: `Остальное (${rest.length})`, sum: restSum, tag: null }]) : shown;
+
+    const sumAll = segments.reduce((s, n) => s + n.sum, 0);
+    const R = 70, SW = 26, CX = 90, CY = 90;
+    const C = 2 * Math.PI * R;
+
+    let offset = 0;
+    let arcs = "";
+    const colors = segments.map((n, i) => tagColor(n.tag) || CHART_FALLBACK_COLORS[i % CHART_FALLBACK_COLORS.length]);
+    segments.forEach((n, i) => {
+      const frac = sumAll !== 0 ? n.sum / sumAll : 0;
+      const dash = frac * C;
+      arcs += `<circle r="${R}" cx="${CX}" cy="${CY}" fill="none" stroke="${colors[i]}" stroke-width="${SW}" ` +
+        `stroke-dasharray="${dash.toFixed(2)} ${(C - dash).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" />`;
+      offset += dash;
+    });
+
+    let legend = '<div class="chart-legend">';
+    segments.forEach((n, i) => {
+      const pct = sumAll !== 0 ? (n.sum / sumAll * 100).toFixed(1) : "0.0";
+      legend += `<div class="chart-legend-row">`;
+      legend += `<span class="chart-swatch" style="background:${colors[i]}"></span>`;
+      legend += `<span class="chart-legend-title" title="${escapeHtml(n.title)}">${escapeHtml(n.title)}</span>`;
+      legend += `<span class="chart-legend-pct">${pct}%</span>`;
+      legend += `<span class="chart-legend-val">${fmt(n.sum)}</span>`;
+      legend += `</div>`;
+    });
+    legend += "</div>";
+
+    return `<div class="chart">
+      <svg width="180" height="180" viewBox="0 0 180 180" class="chart-pie">
+        <g transform="rotate(-90 ${CX} ${CY})">${arcs}</g>
+        <text x="${CX}" y="${CY - 4}" text-anchor="middle" class="chart-center-label">сумма</text>
+        <text x="${CX}" y="${CY + 14}" text-anchor="middle" class="chart-center-value">${fmt(sumAll)}</text>
+      </svg>
+      ${legend}
+    </div>`;
+  }
+
+  function formatDateRu(dateStr) {
+    const [y, m, d] = dateStr.split("-");
+    return `${d}.${m}.${y}`;
+  }
+
+  function formatPeriod() {
+    const type = currentPeriodType();
+    if (type === "year") return String(yearInput.value) + " год";
+    if (type === "range") {
+      const from = dateFromInput.value, to = dateToInput.value;
+      if (from && to && from === to) return formatDateRu(from);
+      return `${from ? formatDateRu(from) : "…"} – ${to ? formatDateRu(to) : "…"}`;
+    }
+    const [y, m] = monthInput.value.split("-").map(Number);
+    const name = new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric" }).format(new Date(y, m - 1, 1));
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  }
+
+  // Собирает строку "период [+ фильтр по проектам]". Если у выбранного узла
+  // выбран и родитель — узел не упоминается отдельно (уже покрыт родителем).
+  function activeFilterLabel(mode) {
+    let label = formatPeriod();
+
+    if (mode === "all") return label;
+
+    const titles = selectedTopTitles();
+    if (titles.length === 0) return label;
+
+    const verb = mode === "include" ? "только" : "кроме";
+    return `${label} · Фильтр по проектам: ${verb} ${titles.map(escapeHtml).join(", ")}`;
+  }
+
+  // Заголовки отмеченных узлов фильтра проектов: если у выбранного узла выбран
+  // и родитель — узел не упоминается отдельно (уже покрыт родителем).
+  function selectedTopTitles() {
+    const titles = [];
+    function walk(id) {
+      const n = projectTreeData.nodeMap.get(id);
+      const cb = checkboxFor(id);
+      if (cb && cb.checked && !cb.indeterminate) {
+        titles.push(n.title);
+        return;
+      }
+      for (const cid of n.childIds) walk(cid);
+    }
+    for (const r of projectTreeData.roots) walk(r.id);
+    titles.sort((a, b) => a.localeCompare(b, "ru"));
+    return titles;
+  }
+
+  // Короткая файловая мнемоника текущего фильтра — для имени CSV
+  function filterMnemonic() {
+    const reportType = currentReportType();
+    const mode = currentMode();
+    const parts = [reportType === "income" ? "доходы" : "расходы"];
+
+    if (mode !== "all") {
+      const titles = selectedTopTitles();
+      if (titles.length) {
+        const verb = mode === "include" ? "только" : "кроме";
+        parts.push(verb, titles.join("+"));
+      }
+    }
+
+    return parts
+      .join("_")
+      .replace(/#/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/[^\p{L}\p{N}_+-]/gu, "");
+  }
+
+  // parentSum === null означает верхний уровень — колонка "доля от родителя" пустая.
+  // depth задаёт отступ строки (padding-left), чтобы колонки сумм/долей не разъезжались.
+  function renderTree(levelMap, fmt, total, parentSum, depth) {
+    const nodes = Array.from(levelMap.values()).sort((a, b) => b.sum - a.sum);
+    const indent = `padding-left:${depth * 18}px`;
+    let html = "";
+    for (const n of nodes) {
+      const hasChildren = n.children.size > 0;
+      const [p1, p2] = pct(n.sum, total, parentSum);
+      if (hasChildren) {
+        html += `<details class="tree-node"><summary class="tree-row" style="${indent}">`;
+        html += `<span class="t-left"><span class="tree-marker"></span>${categoryIcon(n.tag, n.title)}<span class="t-title">${escapeHtml(n.title)}</span></span>`;
+        html += `<span class="t-sum">${fmt(n.sum)}</span><span class="t-pct1">${p1}</span><span class="t-pct2">${p2}</span>`;
+        html += `</summary>`;
+        html += `<div class="tree-children">`;
+        html += renderTree(n.children, fmt, total, n.sum, depth + 1);
+        if (n.ownSum !== 0) {
+          const [op1, op2] = pct(n.ownSum, total, n.sum);
+          html += `<details class="tree-leaf"><summary class="tree-row" style="padding-left:${(depth + 1) * 18}px">`;
+          html += `<span class="t-left"><span class="leaf-marker"></span>${categoryIcon(n.tag, n.title)}<span class="t-title muted">без подкатегории</span></span>`;
+          html += `<span class="t-sum">${fmt(n.ownSum)}</span><span class="t-pct1">${op1}</span><span class="t-pct2">${op2}</span>`;
+          html += `</summary>${renderTxList(n.txs, fmt, (depth + 1) * 18 + 37, n.ownSum)}</details>`;
+        }
+        html += `</div></details>`;
+      } else {
+        // точки-маркер только у настоящих подкатегорий (внутри раскрытого родителя),
+        // у категорий верхнего уровня без вложенности — просто отступ без точек
+        const markerClass = depth > 0 ? "leaf-marker" : "leaf-marker no-dots";
+        html += `<details class="tree-leaf"><summary class="tree-row" style="${indent}">`;
+        html += `<span class="t-left"><span class="${markerClass}"></span>${categoryIcon(n.tag, n.title)}<span class="t-title">${escapeHtml(n.title)}</span></span>`;
+        html += `<span class="t-sum">${fmt(n.sum)}</span><span class="t-pct1">${p1}</span><span class="t-pct2">${p2}</span>`;
+        html += `</summary>${renderTxList(n.txs, fmt, depth * 18 + 37, n.sum)}</details>`;
+      }
+    }
+    return html;
+  }
+
+  // indentPx — на сколько сдвинуть текст, чтобы транзакции визуально были под своей категорией;
+  // на выравнивание колонки суммы это не влияет (та же .tree-row сетка, что и у категорий)
+  // categorySum — сумма категории, под которой показан этот список (для доли транзакции)
+  function renderTxList(txs, fmt, indentPx, categorySum) {
+    if (!txs || txs.length === 0) {
+      return `<div class="tx-empty" style="padding-left:${indentPx}px">Нет транзакций</div>`;
+    }
+    const sorted = txs.slice().sort((a, b) => a.date.localeCompare(b.date));
+    let html = '<div class="tx-list">';
+    for (const t of sorted) {
+      const d = t.date.length === 10 ? `${t.date.slice(8, 10)}.${t.date.slice(5, 7)}` : t.date;
+      const label = t.payee ? escapeHtml(t.payee) : "—";
+      const comment = t.comment ? ` · ${escapeHtml(t.comment)}` : "";
+      const proj = t.project ? ` · ${escapeHtml(t.project)}` : "";
+      const acc = t.account ? ` · ${escapeHtml(t.account)}` : "";
+      const full = `${d} · ${label}${comment}${proj}${acc}`;
+      const txPct = categorySum ? (t.amount / categorySum * 100).toFixed(1) + "%" : "";
+      html += `<details class="tx-item"><summary class="tree-row" style="padding-left:${indentPx}px">`;
+      html += `<span class="t-left"><span class="tx-marker"></span><span class="t-title" title="${full}">${full}</span></span>`;
+      html += `<span class="t-sum">${fmt(t.amount)}</span><span class="t-pct1">${txPct}</span><span class="t-pct2"></span>`;
+      html += `</summary>${renderTxDetail(t, indentPx + 16)}</details>`;
+    }
+    html += "</div>";
+    return html;
+  }
+
+  function formatOriginalAmount(t) {
+    const instr = instrumentById.get(t.instrumentId);
+    const sym = instr ? (instr.symbol || instr.shortTitle || "") : "";
+    const val = t.rawAmount.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return sym ? `${val} ${sym}` : val;
+  }
+
+  function renderTxDetail(t, indentPx) {
+    const rows = [];
+    rows.push(["Дата", formatDateRu(t.date)]);
+    rows.push(["Категория", t.parentCategory ? `${escapeHtml(t.parentCategory)} / ${escapeHtml(t.category)}` : escapeHtml(t.category)]);
+    if (t.project) rows.push(["Проект", escapeHtml(t.project)]);
+    if (t.account) rows.push(["Счёт", escapeHtml(t.account)]);
+    if (t.payee) rows.push(["Получатель", escapeHtml(t.payee)]);
+    if (t.originalPayee) rows.push(["Исходное название", escapeHtml(t.originalPayee)]);
+    if (t.merchant) rows.push(["Мерчант", escapeHtml(t.merchant)]);
+    if (t.comment) rows.push(["Комментарий", escapeHtml(t.comment)]);
+    rows.push(["Сумма операции", formatOriginalAmount(t)]);
+    if (t.mcc != null) rows.push(["MCC", String(t.mcc)]);
+    if (t.hold) rows.push(["Статус", "не подтверждена (hold)"]);
+    if (t.qrCode) rows.push(["QR-код", "есть"]);
+    rows.push(["ID", escapeHtml(t.id)]);
+
+    let html = `<div class="tx-detail" style="padding-left:${indentPx}px">`;
+    for (const [k, v] of rows) {
+      html += `<div class="tx-detail-row"><span class="tx-detail-key">${k}</span><span class="tx-detail-val">${v}</span></div>`;
+    }
+    html += `</div>`;
+    return html;
+  }
+
+  // Закрытый по умолчанию блок со всеми операциями-возвратами (см. computeRefunds) —
+  // категория различается по строкам, поэтому в отличие от renderTxList показываем её прямо в строке.
+  function renderRefunds(refunds, fmt) {
+    const sum = refunds.reduce((s, r) => s + r.amount, 0);
+    let html = `<details class="tree-node"><summary class="tree-row">`;
+    html += `<span class="t-left"><span class="tree-marker"></span><span class="t-title">Возвраты (${refunds.length})</span></span>`;
+    html += `<span class="t-sum">${fmt(sum)}</span><span class="t-pct1"></span><span class="t-pct2"></span>`;
+    html += `</summary><div class="tree-children">${renderRefundsList(refunds, fmt)}</div></details>`;
+    return html;
+  }
+
+  function renderRefundsList(refunds, fmt) {
+    let html = '<div class="tx-list">';
+    for (const t of refunds) {
+      const d = t.date.length === 10 ? `${t.date.slice(8, 10)}.${t.date.slice(5, 7)}` : t.date;
+      const catLabel = t.parentCategory ? `${t.parentCategory} / ${t.category}` : t.category;
+      const label = t.payee ? escapeHtml(t.payee) : "—";
+      const comment = t.comment ? ` · ${escapeHtml(t.comment)}` : "";
+      const full = `${d} · ${escapeHtml(catLabel)} · ${label}${comment}`;
+      html += `<details class="tx-item"><summary class="tree-row" style="padding-left:18px">`;
+      html += `<span class="t-left"><span class="tx-marker"></span><span class="t-title" title="${full}">${full}</span></span>`;
+      html += `<span class="t-sum">${fmt(t.amount)}</span><span class="t-pct1"></span><span class="t-pct2"></span>`;
+      html += `</summary>${renderTxDetail(t, 34)}</details>`;
+    }
+    html += "</div>";
+    return html;
+  }
+
+  // Закрытый по умолчанию блок со всеми переводами на счета вне выборки (см. computeExternalTransfers) —
+  // показывается всегда, независимо от чекбокса "Учитывать переводы..." (это отдельный аудит-срез,
+  // а не альтернатива основному дереву). Категория у всех строк одна и та же ("Переводы вне выборки"),
+  // поэтому строку рендерим как обычный renderTxList (получатель/проект/счёт), без категории.
+  function renderExternalTransfers(list, fmt) {
+    const sum = list.reduce((s, r) => s + r.amount, 0);
+    const plus = list.filter(r => r.amount > 0).reduce((s, r) => s + r.amount, 0);
+    const minus = list.filter(r => r.amount < 0).reduce((s, r) => s + r.amount, 0);
+    let html = `<details class="tree-node"><summary class="tree-row">`;
+    html += `<span class="t-left"><span class="tree-marker"></span><span class="t-title">Переводы вне выборки (${list.length})</span></span>`;
+    html += `<span class="t-sum">${fmt(sum)}</span><span class="t-pct1"></span><span class="t-pct2"></span>`;
+    html += `</summary><div class="tree-children">`;
+    html += `<div class="tree-row" style="padding-left:18px"><span class="t-left"><span class="leaf-marker no-dots"></span><span class="t-title muted">Пришло (+)</span></span><span class="t-sum">${fmt(plus)}</span><span class="t-pct1"></span><span class="t-pct2"></span></div>`;
+    html += `<div class="tree-row" style="padding-left:18px"><span class="t-left"><span class="leaf-marker no-dots"></span><span class="t-title muted">Ушло (-)</span></span><span class="t-sum">${fmt(minus)}</span><span class="t-pct1"></span><span class="t-pct2"></span></div>`;
+    html += renderTxList(list, fmt, 18, null);
+    html += `</div></details>`;
+    return html;
+  }
+
+  // Возвращает [доля от родителя, доля от общего итога] — обе как готовые строки "34.2%".
+  // Для верхнего уровня (parentSum === null) первая колонка (от родителя) пустая.
+  function pct(sum, total, parentSum) {
+    if (total === 0) return ["", ""];
+    const ofTotal = (sum / total * 100).toFixed(1) + "%";
+    if (parentSum === null) return ["", ofTotal];
+    const ofParent = parentSum !== 0 ? (sum / parentSum * 100).toFixed(1) + "%" : "—";
+    return [ofParent, ofTotal];
+  }
+
+  // Плоский список строк сводки по дереву категорий (title, depth, сумма) — для CSV.
+  // leaf — атомарный узел (нет подкатегорий, включая синтетические "без подкатегории"):
+  // сумма каждой транзакции попадает ровно в один такой узел, поэтому сумма всех leaf-строк
+  // всегда равна общему итогу — на этом строится сверка колонок "родитель"/"подкатегория" в CSV.
+  function flattenSummary(levelMap, depth) {
+    const rows = [];
+    const nodes = Array.from(levelMap.values()).sort((a, b) => b.sum - a.sum);
+    for (const n of nodes) {
+      const hasChildren = n.children.size > 0;
+      rows.push({ title: n.title, depth, sum: n.sum, leaf: !hasChildren });
+      if (hasChildren) {
+        rows.push(...flattenSummary(n.children, depth + 1));
+        if (n.ownSum !== 0) {
+          rows.push({ title: "без подкатегории", depth: depth + 1, sum: n.ownSum, leaf: true });
+        }
+      }
+    }
+    return rows;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
+})();
+</script>
+
+<div class="footer"><span class="version">v1.14</span> · © <a href="https://t.me/vitalysennikov" target="_blank" rel="noopener">@vitalysennikov</a>, 2026</div>
+
+</body>
+</html>
