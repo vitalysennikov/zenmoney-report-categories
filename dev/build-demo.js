@@ -51,6 +51,22 @@ const injected = `
             s.parentElement.open = true;
           }
         });
+        // раскрыть блок "Счета", чтобы был виден список чекбоксов и кнопки быстрого выбора
+        document.querySelectorAll("details.fieldset-details > summary").forEach(function (s) {
+          if (s.textContent.indexOf("Счета") !== -1) s.parentElement.open = true;
+        });
+      } else if (act === "4") {
+        // только выбранные: один проект (#Ремонт)
+        document.querySelector('input[name="mode"][value="include"]').click();
+        var cbIncl = document.querySelector('#projectChecks input[data-id="proj-remont"]');
+        if (cbIncl) cbIncl.click();
+      } else if (act === "5") {
+        // кроме выбранных: отмечены все существующие проекты — по сути исключены все "#проекты"
+        document.querySelector('input[name="mode"][value="exclude"]').click();
+        var cbEx1 = document.querySelector('#projectChecks input[data-id="proj-remont"]');
+        var cbEx2 = document.querySelector('#projectChecks input[data-id="proj-rabota"]');
+        if (cbEx1) cbEx1.click();
+        if (cbEx2) cbEx2.click();
       }
       document.title = "READY";
     }, 250);
